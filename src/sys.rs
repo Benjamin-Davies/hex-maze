@@ -79,8 +79,8 @@ pub mod signal {
     extern "C" {
         pub fn sigaction(
             signal: Signal,
-            action: Option<&SigAction>,
-            old_action: Option<&mut SigAction>,
+            action: *const SigAction,
+            old_action: *mut SigAction,
         ) -> i32;
     }
 }
@@ -100,6 +100,21 @@ pub mod termios {
         control_chars: [u8; 32],
         ispeed: u32,
         ospeed: u32,
+    }
+
+    impl Termios {
+        pub fn zeros() -> Self {
+            Self {
+                iflag: 0,
+                oflag: 0,
+                cflag: 0,
+                lflag: 0,
+                line: 0,
+                control_chars: [0; 32],
+                ispeed: 0,
+                ospeed: 0,
+            }
+        }
     }
 
     #[derive(Clone, Copy)]

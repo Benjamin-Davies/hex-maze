@@ -1,16 +1,16 @@
 use std::{
     io::{self, Read, Write},
-    mem,
     os::fd::{AsRawFd, RawFd},
+    ptr,
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
 use crate::sys::{
-    ioctl::{ioctl, IOCtl, WinSize},
-    poll::{poll, PollEvents, PollFd},
-    signal::{sigaction, SigAction, SigActionFlags, SigSet, Signal},
-    termios::{cfmakeraw, tcgetattr, tcsetattr, SetAttrActions, Termios},
+    ioctl::{IOCtl, WinSize},
+    poll::{PollEvents, PollFd},
+    signal::{SigAction, SigActionFlags, SigSet, Signal},
+    termios::{SetAttrActions, Termios},
 };
 
 pub const fn ctrl(c: u8) -> u8 {
@@ -33,31 +33,27 @@ impl Terminal {
         let mut term = Self {
             stdin: io::stdin().lock(),
             stdout: io::stdout().lock(),
-            old_termios: unsafe { mem::zeroed() },
+            old_termios: Termios::zeros(),
         };
 
         extern "C" fn sigkill_handler(_: Signal) {
             EXIT.store(true, Ordering::SeqCst);
         }
-        unsafe {
-            sigaction(
-                Signal::Term,
-                Some(&SigAction {
-                    handler: sigkill_handler,
-                    mask: SigSet::default(),
-                    flags: SigActionFlags::none(),
-                }),
-                None,
-            );
-        }
+        sigaction(
+            Signal::Term,
+            Some(&SigAction {
+                handler: sigkill_handler,
+                mask: SigSet::default(),
+                flags: SigActionFlags::none(),
+            }),
+            None,
+        );
 
         let fd = term.fd();
-        unsafe {
-            tcgetattr(fd, &mut term.old_termios);
-            let mut termios = term.old_termios;
-            cfmakeraw(&mut termios);
-            tcsetattr(fd, SetAttrActions::Drain, &mut termios);
-        }
+        let mut termios = tcgetattr(fd);
+        term.old_termios = termios;
+        cfmakeraw(&mut termios);
+        tcsetattr(fd, SetAttrActions::Drain, &termios);
 
         term.alt_screen(true).cursor_visible(false).flush();
 
@@ -69,9 +65,7 @@ impl Drop for Terminal {
     fn drop(&mut self) {
         self.alt_screen(false).cursor_visible(true).flush();
 
-        unsafe {
-            tcsetattr(self.fd(), SetAttrActions::Drain, &self.old_termios);
-        }
+        tcsetattr(self.fd(), SetAttrActions::Drain, &self.old_termios);
     }
 }
 
@@ -81,17 +75,12 @@ impl Terminal {
     }
 
     pub fn poll(&mut self, timeout: Duration) -> u32 {
-        let mut poll_fd = PollFd {
+        let mut poll_fds = [PollFd {
             fd: self.fd(),
             events: PollEvents::In,
             revents: PollEvents::none(),
-        };
-        let res = unsafe { poll(&mut poll_fd, 1, timeout.as_millis() as i32) };
-        if res < 0 {
-            panic!("poll failed");
-        } else {
-            res as u32
-        }
+        }];
+        poll(&mut poll_fds, timeout)
     }
 
     pub fn read(&mut self) -> u8 {
@@ -147,10 +136,61 @@ impl Terminal {
     }
 
     pub fn size(&self) -> (u16, u16) {
-        let mut size = WinSize::default();
-        unsafe {
-            ioctl(self.fd(), IOCtl::WinSize, &mut size);
-        }
+        let size = ioctl_winsize(self.fd());
         (size.col, size.row)
     }
+}
+
+fn poll(poll_fds: &mut [PollFd], timeout: Duration) -> u32 {
+    let res;
+    unsafe {
+        res = crate::sys::poll::poll(
+            poll_fds.as_mut_ptr(),
+            poll_fds.len(),
+            timeout.as_millis() as i32,
+        );
+    }
+    if res < 0 {
+        panic!("poll failed");
+    } else {
+        res as u32
+    }
+}
+
+fn sigaction(signal: Signal, action: Option<&SigAction>, old_action: Option<&mut SigAction>) {
+    unsafe {
+        crate::sys::signal::sigaction(
+            signal,
+            action.map_or(ptr::null(), |a| a),
+            old_action.map_or(ptr::null_mut(), |a| a),
+        );
+    }
+}
+
+fn tcgetattr(fd: RawFd) -> Termios {
+    let mut termios = Termios::zeros();
+    unsafe {
+        crate::sys::termios::tcgetattr(fd, &mut termios);
+    }
+    termios
+}
+
+fn tcsetattr(fd: RawFd, action: SetAttrActions, termios: &Termios) {
+    unsafe {
+        crate::sys::termios::tcsetattr(fd, action, termios);
+    }
+}
+
+fn cfmakeraw(termios: &mut Termios) {
+    unsafe {
+        crate::sys::termios::cfmakeraw(termios);
+    }
+}
+
+fn ioctl_winsize(fd: RawFd) -> WinSize {
+    let mut size = WinSize::default();
+    unsafe {
+        crate::sys::ioctl::ioctl(fd, IOCtl::WinSize, &mut size);
+    }
+    size
 }
