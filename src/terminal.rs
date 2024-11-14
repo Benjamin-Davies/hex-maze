@@ -1,11 +1,12 @@
 use std::{
     io::{self, Read, Write},
     mem,
-    os::fd::AsRawFd,
+    os::fd::{AsRawFd, RawFd},
     sync::atomic::{AtomicBool, Ordering},
 };
 
 use self::{
+    ioctl::{ioctl, WinSize, TIOCGWINSZ},
     signal::{sigaction, SigAction, SigActionFlags, SigSet, Signal, SIGTERM},
     termios::{cfmakeraw, tcgetattr, tcsetattr, Termios, TCSADRAIN},
 };
@@ -27,6 +28,12 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new() -> Self {
+        let mut term = Self {
+            stdin: io::stdin().lock(),
+            stdout: io::stdout().lock(),
+            old_termios: unsafe { mem::zeroed() },
+        };
+
         extern "C" fn sigkill_handler(_: Signal) {
             EXIT.store(true, Ordering::SeqCst);
         }
@@ -42,24 +49,13 @@ impl Terminal {
             );
         }
 
-        let stdin = io::stdin().lock();
-        let stdout = io::stdout().lock();
-        let fd = stdin.as_raw_fd();
-
-        let mut old_termios;
+        let fd = term.fd();
         unsafe {
-            old_termios = mem::zeroed();
-            tcgetattr(fd, &mut old_termios);
-            let mut termios = old_termios;
+            tcgetattr(fd, &mut term.old_termios);
+            let mut termios = term.old_termios;
             cfmakeraw(&mut termios);
             tcsetattr(fd, TCSADRAIN, &mut termios);
         }
-
-        let mut term = Self {
-            stdin,
-            stdout,
-            old_termios,
-        };
 
         term.alt_screen(true).cursor_visible(false).flush();
 
@@ -71,9 +67,8 @@ impl Drop for Terminal {
     fn drop(&mut self) {
         self.alt_screen(false).cursor_visible(true).flush();
 
-        let fd = self.stdin.as_raw_fd();
         unsafe {
-            tcsetattr(fd, TCSADRAIN, &self.old_termios);
+            tcsetattr(self.fd(), TCSADRAIN, &self.old_termios);
         }
     }
 }
@@ -110,7 +105,9 @@ impl Terminal {
         self.csi().write("2J")
     }
 
-    pub fn goto(&mut self, row: u16, col: u16) -> &mut Self {
+    pub fn goto(&mut self, x: u16, y: u16) -> &mut Self {
+        let row = y + 1;
+        let col = x + 1;
         self.csi();
         write!(self.stdout, "{row};{col}H").unwrap();
         self
@@ -132,15 +129,51 @@ impl Terminal {
             self.csi().write("?1049l")
         }
     }
+
+    fn fd(&self) -> RawFd {
+        self.stdin.as_raw_fd()
+    }
+
+    pub fn size(&self) -> (u16, u16) {
+        let mut size = WinSize::default();
+        unsafe {
+            ioctl(self.fd(), TIOCGWINSZ, &mut size);
+        }
+        (size.col, size.row)
+    }
 }
 
-/// A subset of signal.h
-mod signal {
-    use std::{ffi::c_int, mem};
+/// ioctl.h
+mod ioctl {
+    use std::os::fd::RawFd;
 
     #[derive(Clone, Copy)]
     #[repr(transparent)]
-    pub struct Signal(c_int);
+    pub struct IOCtl(u64);
+
+    pub const TIOCGWINSZ: IOCtl = IOCtl(0x5413);
+
+    #[derive(Default)]
+    #[repr(C)]
+    pub struct WinSize {
+        pub row: u16,
+        pub col: u16,
+        xpixel: u16,
+        ypixel: u16,
+    }
+
+    extern "C" {
+        pub fn ioctl(fd: RawFd, request: IOCtl, ...) -> i32;
+    }
+}
+
+/// signal.h
+mod signal {
+    use std::mem;
+
+    #[derive(Clone, Copy)]
+    #[repr(transparent)]
+    pub struct Signal(i32);
 
     pub const SIGTERM: Signal = Signal(15);
 
@@ -159,50 +192,47 @@ mod signal {
 
     #[derive(Default)]
     #[repr(transparent)]
-    pub struct SigActionFlags(c_int);
+    pub struct SigActionFlags(i32);
 
     extern "C" {
         pub fn sigaction(
             signal: Signal,
             action: Option<&SigAction>,
             old_action: Option<&mut SigAction>,
-        ) -> c_int;
+        ) -> i32;
     }
 }
 
-/// A subset of termios.h
+/// termios.h
 mod termios {
-    use std::{
-        ffi::{c_int, c_uint},
-        os::fd::RawFd,
-    };
+    use std::os::fd::RawFd;
 
     #[derive(Clone, Copy)]
     #[repr(C)]
     pub struct Termios {
-        iflag: c_uint,
-        oflag: c_uint,
-        cflag: c_uint,
-        lflag: c_uint,
+        iflag: u32,
+        oflag: u32,
+        cflag: u32,
+        lflag: u32,
         line: u8,
         control_chars: [u8; 32],
-        ispeed: c_uint,
-        ospeed: c_uint,
+        ispeed: u32,
+        ospeed: u32,
     }
 
     #[derive(Clone, Copy)]
     #[repr(transparent)]
-    pub struct TermiosSetAttrActions(c_int);
+    pub struct TermiosSetAttrActions(i32);
 
     pub const TCSADRAIN: TermiosSetAttrActions = TermiosSetAttrActions(1);
 
     extern "C" {
-        pub fn tcgetattr(fd: RawFd, termios: &mut Termios) -> c_int;
+        pub fn cfmakeraw(termios: &mut Termios);
+        pub fn tcgetattr(fd: RawFd, termios: &mut Termios) -> i32;
         pub fn tcsetattr(
             fd: RawFd,
             optional_actions: TermiosSetAttrActions,
             termios: &Termios,
-        ) -> c_int;
-        pub fn cfmakeraw(termios: &mut Termios);
+        ) -> i32;
     }
 }

@@ -7,7 +7,14 @@ mod terminal;
 fn main() -> io::Result<()> {
     let mut term = Terminal::new();
 
-    term.clear().goto(1, 1).write("Hello").flush();
+    let (w, h) = term.size();
+    term.clear().goto(0, 0);
+    for y in 0..h {
+        for x in 0..w {
+            term.write(if (x + y) % 2 == 0 { "#" } else { " " });
+        }
+    }
+    term.flush();
 
     while !term.should_exit() {
         match term.read() {
