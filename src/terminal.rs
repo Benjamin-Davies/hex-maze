@@ -6,11 +6,11 @@ use std::{
     time::Duration,
 };
 
-use self::{
-    ioctl::{ioctl, WinSize, TIOCGWINSZ},
+use crate::sys::{
+    ioctl::{ioctl, IOCtl, WinSize},
     poll::{poll, PollEvents, PollFd},
-    signal::{sigaction, SigAction, SigActionFlags, SigSet, Signal, SIGTERM},
-    termios::{cfmakeraw, tcgetattr, tcsetattr, Termios, TCSADRAIN},
+    signal::{sigaction, SigAction, SigActionFlags, SigSet, Signal},
+    termios::{cfmakeraw, tcgetattr, tcsetattr, SetAttrActions, Termios},
 };
 
 pub const fn ctrl(c: u8) -> u8 {
@@ -41,11 +41,11 @@ impl Terminal {
         }
         unsafe {
             sigaction(
-                SIGTERM,
+                Signal::Term,
                 Some(&SigAction {
                     handler: sigkill_handler,
                     mask: SigSet::default(),
-                    flags: SigActionFlags::default(),
+                    flags: SigActionFlags::none(),
                 }),
                 None,
             );
@@ -56,7 +56,7 @@ impl Terminal {
             tcgetattr(fd, &mut term.old_termios);
             let mut termios = term.old_termios;
             cfmakeraw(&mut termios);
-            tcsetattr(fd, TCSADRAIN, &mut termios);
+            tcsetattr(fd, SetAttrActions::Drain, &mut termios);
         }
 
         term.alt_screen(true).cursor_visible(false).flush();
@@ -70,7 +70,7 @@ impl Drop for Terminal {
         self.alt_screen(false).cursor_visible(true).flush();
 
         unsafe {
-            tcsetattr(self.fd(), TCSADRAIN, &self.old_termios);
+            tcsetattr(self.fd(), SetAttrActions::Drain, &self.old_termios);
         }
     }
 }
@@ -149,125 +149,8 @@ impl Terminal {
     pub fn size(&self) -> (u16, u16) {
         let mut size = WinSize::default();
         unsafe {
-            ioctl(self.fd(), TIOCGWINSZ, &mut size);
+            ioctl(self.fd(), IOCtl::WinSize, &mut size);
         }
         (size.col, size.row)
-    }
-}
-
-/// ioctl.h
-mod ioctl {
-    use std::os::fd::RawFd;
-
-    #[derive(Clone, Copy)]
-    #[repr(transparent)]
-    pub struct IOCtl(u64);
-
-    pub const TIOCGWINSZ: IOCtl = IOCtl(0x5413);
-
-    #[derive(Default)]
-    #[repr(C)]
-    pub struct WinSize {
-        pub row: u16,
-        pub col: u16,
-        xpixel: u16,
-        ypixel: u16,
-    }
-
-    extern "C" {
-        pub fn ioctl(fd: RawFd, request: IOCtl, ...) -> i32;
-    }
-}
-
-/// poll.h
-mod poll {
-    use std::os::fd::RawFd;
-
-    use bitmask_enum::bitmask;
-
-    #[repr(C)]
-    pub struct PollFd {
-        pub fd: RawFd,
-        pub events: PollEvents,
-        pub revents: PollEvents,
-    }
-
-    #[bitmask(i32)]
-    pub enum PollEvents {
-        In = 0x001,
-    }
-
-    extern "C" {
-        pub fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
-    }
-}
-
-/// signal.h
-mod signal {
-    use std::mem;
-
-    #[derive(Clone, Copy)]
-    #[repr(transparent)]
-    pub struct Signal(i32);
-
-    pub const SIGTERM: Signal = Signal(15);
-
-    #[repr(C)]
-    pub struct SigAction {
-        pub handler: SignalHandler,
-        pub mask: SigSet,
-        pub flags: SigActionFlags,
-    }
-
-    pub type SignalHandler = extern "C" fn(Signal);
-
-    #[derive(Default)]
-    #[repr(C)]
-    pub struct SigSet([u64; 1024 / (8 * mem::size_of::<u64>())]);
-
-    #[derive(Default)]
-    #[repr(transparent)]
-    pub struct SigActionFlags(i32);
-
-    extern "C" {
-        pub fn sigaction(
-            signal: Signal,
-            action: Option<&SigAction>,
-            old_action: Option<&mut SigAction>,
-        ) -> i32;
-    }
-}
-
-/// termios.h
-mod termios {
-    use std::os::fd::RawFd;
-
-    #[derive(Clone, Copy)]
-    #[repr(C)]
-    pub struct Termios {
-        iflag: u32,
-        oflag: u32,
-        cflag: u32,
-        lflag: u32,
-        line: u8,
-        control_chars: [u8; 32],
-        ispeed: u32,
-        ospeed: u32,
-    }
-
-    #[derive(Clone, Copy)]
-    #[repr(transparent)]
-    pub struct TermiosSetAttrActions(i32);
-
-    pub const TCSADRAIN: TermiosSetAttrActions = TermiosSetAttrActions(1);
-
-    extern "C" {
-        pub fn cfmakeraw(termios: &mut Termios);
-        pub fn tcgetattr(fd: RawFd, termios: &mut Termios) -> i32;
-        pub fn tcsetattr(
-            fd: RawFd,
-            optional_actions: TermiosSetAttrActions,
-            termios: &Termios,
-        ) -> i32;
     }
 }

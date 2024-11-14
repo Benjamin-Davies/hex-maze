@@ -1,4 +1,4 @@
-use std::{thread::sleep, time::Duration};
+use std::time::Duration;
 
 use self::{
     maze::Maze,
@@ -6,6 +6,7 @@ use self::{
 };
 
 mod maze;
+mod sys;
 mod terminal;
 
 fn main() {
