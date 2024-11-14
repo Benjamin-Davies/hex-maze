@@ -3,10 +3,12 @@ use std::{
     mem,
     os::fd::{AsRawFd, RawFd},
     sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
 };
 
 use self::{
     ioctl::{ioctl, WinSize, TIOCGWINSZ},
+    poll::{poll, PollEvents, PollFd},
     signal::{sigaction, SigAction, SigActionFlags, SigSet, Signal, SIGTERM},
     termios::{cfmakeraw, tcgetattr, tcsetattr, Termios, TCSADRAIN},
 };
@@ -78,13 +80,23 @@ impl Terminal {
         EXIT.load(Ordering::SeqCst)
     }
 
+    pub fn poll(&mut self, timeout: Duration) -> u32 {
+        let mut poll_fd = PollFd {
+            fd: self.fd(),
+            events: PollEvents::In,
+            revents: PollEvents::none(),
+        };
+        let res = unsafe { poll(&mut poll_fd, 1, timeout.as_millis() as i32) };
+        if res < 0 {
+            panic!("poll failed");
+        } else {
+            res as u32
+        }
+    }
+
     pub fn read(&mut self) -> u8 {
         let mut buf = [0];
-        match self.stdin.read(&mut buf) {
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => return 0,
-            res => res,
-        }
-        .unwrap();
+        self.stdin.read(&mut buf).unwrap();
         buf[0]
     }
 
@@ -164,6 +176,29 @@ mod ioctl {
 
     extern "C" {
         pub fn ioctl(fd: RawFd, request: IOCtl, ...) -> i32;
+    }
+}
+
+/// poll.h
+mod poll {
+    use std::os::fd::RawFd;
+
+    use bitmask_enum::bitmask;
+
+    #[repr(C)]
+    pub struct PollFd {
+        pub fd: RawFd,
+        pub events: PollEvents,
+        pub revents: PollEvents,
+    }
+
+    #[bitmask(i32)]
+    pub enum PollEvents {
+        In = 0x001,
+    }
+
+    extern "C" {
+        pub fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
     }
 }
 

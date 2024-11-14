@@ -1,28 +1,40 @@
-use std::{io, thread::sleep, time::Duration};
+use std::{thread::sleep, time::Duration};
 
-use terminal::{Terminal, CTRL_C, ESC};
+use self::{
+    maze::Maze,
+    terminal::{Terminal, CTRL_C, ESC},
+};
 
+mod maze;
 mod terminal;
 
-fn main() -> io::Result<()> {
+fn main() {
     let mut term = Terminal::new();
 
-    let (w, h) = term.size();
-    term.clear().goto(0, 0);
-    for y in 0..h {
-        for x in 0..w {
-            term.write(if (x + y) % 2 == 0 { "#" } else { " " });
+    let mut maze;
+    let mut last_maze = Maze::empty();
+    'main_loop: while !term.should_exit() {
+        maze = Maze::new(&term);
+
+        if maze != last_maze {
+            term.clear();
+            Maze::new(&term).draw(&mut term);
+            term.flush();
+
+            last_maze.copy_from(&maze);
+        }
+
+        if term.poll(Duration::from_millis(100)) > 0 {
+            loop {
+                match term.read() {
+                    CTRL_C | ESC | b'q' => break 'main_loop,
+                    _ => {}
+                }
+
+                if term.poll(Duration::ZERO) == 0 {
+                    break;
+                }
+            }
         }
     }
-    term.flush();
-
-    while !term.should_exit() {
-        match term.read() {
-            CTRL_C | ESC | b'q' => break,
-            _ => {}
-        }
-        sleep(Duration::from_millis(16));
-    }
-
-    Ok(())
 }
