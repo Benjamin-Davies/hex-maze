@@ -25,17 +25,14 @@ fn main() {
             last_maze.copy_from(&maze);
         }
 
-        if term.poll(Duration::from_millis(100)) > 0 {
-            loop {
-                match term.read() {
-                    CTRL_C | ESC | b'q' => break 'main_loop,
-                    _ => {}
-                }
-
-                if term.poll(Duration::ZERO) == 0 {
-                    break;
-                }
+        let mut timeout = Duration::from_millis(100);
+        while term.poll(timeout) > 0 {
+            match term.read() {
+                CTRL_C | ESC | b'q' => break 'main_loop,
+                _ => {}
             }
+
+            timeout = Duration::ZERO;
         }
     }
 }
