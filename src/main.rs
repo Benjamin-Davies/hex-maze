@@ -15,8 +15,10 @@ fn main() {
     'main_loop: while !term.should_exit() {
         state.step();
 
-        state.maze().draw(&mut term);
-        term.flush();
+        if !state.is_done() {
+            state.maze().draw(&mut term);
+            term.flush();
+        }
 
         let mut timeout = Duration::from_millis(16);
         while term.poll(timeout) > 0 {
@@ -37,7 +39,8 @@ fn main() {
 enum State {
     Generating(Generator),
     Solving(Solver),
-    Done(Maze, IntoIter<Vector>),
+    Backfilling(Maze, IntoIter<Vector>),
+    Done(Maze),
 }
 
 impl State {
@@ -64,22 +67,30 @@ impl State {
                         maze.cells[pos].background = CLEAR_COLOR;
                     }
                     let path = solver.path.clone();
-                    *self = Self::Done(maze, path.into_iter());
+                    *self = Self::Backfilling(maze, path.into_iter());
                 }
             }
-            Self::Done(maze, path) => {
+            Self::Backfilling(maze, path) => {
                 if let Some(pos) = path.next() {
                     maze.cells[pos].background = GREEN;
+                } else {
+                    *self = Self::Done(maze.clone());
                 }
             }
+            Self::Done(_) => {}
         }
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(self, Self::Done(_))
     }
 
     pub fn maze(&self) -> &Maze {
         match self {
             Self::Generating(generator) => &generator.maze,
             Self::Solving(solver) => &solver.maze,
-            Self::Done(maze, _) => maze,
+            Self::Backfilling(maze, _) => maze,
+            Self::Done(maze) => maze,
         }
     }
 }
