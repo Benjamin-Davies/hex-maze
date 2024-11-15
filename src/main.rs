@@ -1,22 +1,16 @@
 use std::time::Duration;
 
-use self::{
+use hex_maze::{
     maze::Maze,
     terminal::{Terminal, CTRL_C, ESC},
 };
 
-mod maze;
-mod sys;
-mod terminal;
-
 fn main() {
     let mut term = Terminal::new();
 
-    let mut maze;
+    let mut maze = Maze::new(&term);
     let mut last_maze = Maze::empty();
     'main_loop: while !term.should_exit() {
-        maze = Maze::new(&term);
-
         if maze != last_maze {
             term.clear();
             Maze::new(&term).draw(&mut term);
@@ -29,6 +23,7 @@ fn main() {
         while term.poll(timeout) > 0 {
             match term.read() {
                 CTRL_C | ESC | b'q' => break 'main_loop,
+                b'r' => maze = Maze::new(&term),
                 _ => {}
             }
 

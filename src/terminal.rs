@@ -28,6 +28,10 @@ pub struct Terminal {
     old_termios: Termios,
 }
 
+pub struct SGR<'a> {
+    term: &'a mut Terminal,
+}
+
 impl Terminal {
     pub fn new() -> Self {
         let mut term = Self {
@@ -131,6 +135,40 @@ impl Terminal {
         }
     }
 
+    pub fn sgr(&mut self) -> SGR {
+        SGR { term: self }
+    }
+}
+
+impl SGR<'_> {
+    fn write(&mut self, n: u8) -> &mut Self {
+        self.term.csi();
+        write!(self.term.stdout, "{n}m").unwrap();
+        self
+    }
+
+    pub fn reset(&mut self) -> &mut Self {
+        self.write(0)
+    }
+
+    pub fn fg(&mut self, color: u8) -> &mut Self {
+        match color % 16 {
+            0..=7 => self.write(30 + color),
+            8..=15 => self.write(90 + color - 8),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn bg(&mut self, color: u8) -> &mut Self {
+        match color % 16 {
+            0..=7 => self.write(40 + color),
+            8..=15 => self.write(100 + color - 8),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl Terminal {
     fn fd(&self) -> RawFd {
         self.stdin.as_raw_fd()
     }
