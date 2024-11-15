@@ -69,6 +69,10 @@ impl Vector {
         Self::NORTH_WEST,
     ];
 
+    pub const fn length(self) -> i32 {
+        self.col.abs() as i32 + self.half_row.abs() as i32
+    }
+
     pub const fn on_grid(&self) -> bool {
         (self.col + self.half_row) % 2 == 0
     }

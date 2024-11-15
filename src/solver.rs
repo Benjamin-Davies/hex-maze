@@ -7,7 +7,7 @@ use crate::{
     terminal::{CLEAR_COLOR, GREEN, RED},
 };
 
-/// Solves a maze using Dijkstra's algorithm.
+/// Solves a maze using A*.
 pub struct Solver {
     pub maze: Maze,
     pub is_done: bool,
@@ -19,6 +19,7 @@ pub struct Solver {
 
 #[derive(Debug, PartialEq, Eq)]
 struct Unvisited {
+    score: i32,
     distance: i32,
     position: Vector,
 }
@@ -31,8 +32,8 @@ impl PartialOrd for Unvisited {
 
 impl Ord for Unvisited {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.distance, self.position)
-            .cmp(&(other.distance, other.position))
+        (self.score, self.distance, self.position)
+            .cmp(&(other.score, other.distance, other.position))
             // Reverse so that the smallest distance is at the top of the max-heap
             .reverse()
     }
@@ -48,6 +49,7 @@ impl Solver {
 
         let mut unvisited = BinaryHeap::new();
         unvisited.push(Unvisited {
+            score: 0,
             distance: 0,
             position,
         });
@@ -66,7 +68,12 @@ impl Solver {
     }
 
     pub fn step(&mut self) {
-        if let Some(Unvisited { distance, position }) = self.unvisited.pop() {
+        if let Some(Unvisited {
+            score: _,
+            distance,
+            position,
+        }) = self.unvisited.pop()
+        {
             if position == self.goal {
                 self.fill_path();
                 self.is_done = true;
@@ -79,10 +86,11 @@ impl Solver {
                     continue;
                 }
 
-                let new_distance = distance + 1;
+                let new_distance = distance + dir.length();
                 if new_distance < self.distances[neighbor] {
                     self.distances[neighbor] = new_distance;
                     self.unvisited.push(Unvisited {
+                        score: new_distance + (neighbor - self.goal).length(),
                         distance: new_distance,
                         position: neighbor,
                     });
