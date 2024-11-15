@@ -26,7 +26,7 @@ impl Distribution<Cell> for Standard {
             north_east: rng.gen(),
             south: rng.gen(),
             north_west: rng.gen(),
-            background: rng.gen::<u8>() % 16,
+            background: rng.gen::<u8>() % 32,
         }
     }
 }

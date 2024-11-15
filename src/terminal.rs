@@ -155,7 +155,7 @@ impl SGR<'_> {
         match color % 16 {
             0..=7 => self.write(30 + color),
             8..=15 => self.write(90 + color - 8),
-            _ => unreachable!(),
+            _ => self.write(38),
         }
     }
 
@@ -163,7 +163,7 @@ impl SGR<'_> {
         match color % 16 {
             0..=7 => self.write(40 + color),
             8..=15 => self.write(100 + color - 8),
-            _ => unreachable!(),
+            _ => self.write(48),
         }
     }
 }
