@@ -37,8 +37,8 @@ impl Maze {
             return Self::empty();
         }
 
-        let cols = (term_width - 3) / 8;
-        let rows = (term_height - 3) / 4;
+        let cols = (term_width - 1) / 4;
+        let rows = (term_height - 2) / 2;
         Self {
             cells: HexGrid::new_with(cols, rows, |_| Cell::default()),
         }
@@ -88,8 +88,9 @@ impl Maze {
     }
 
     fn horizontal_wall_at(&self, coords: Vector) -> bool {
-        let above = coords + Vector::NORTH;
-        let below = coords;
+        let coords = coords.nearest_north();
+        let above = coords;
+        let below = coords + Vector::SOUTH;
         self.wall_between(above, below)
     }
 
@@ -103,99 +104,18 @@ impl Maze {
         self.wall_between(left, right)
     }
 
-    fn vertex_wall_at(&self, coords: Vector) -> bool {
-        let (a, b, c) = if coords.on_grid() {
-            (
-                coords + Vector::ZERO,
-                coords + Vector::NORTH_WEST,
-                coords + Vector::NORTH,
-            )
-        } else {
-            let coords = coords.nearest_north();
-            (
-                coords + Vector::ZERO,
-                coords + Vector::SOUTH_WEST,
-                coords + Vector::NORTH_WEST,
-            )
-        };
-        self.wall_between(a, b) || self.wall_between(b, c) || self.wall_between(c, a)
-    }
-
     pub fn draw(&self, term: &mut Terminal) {
         term.sgr().reset();
         if self.cells.is_empty() {
             return;
         }
 
-        let height = self.cells.rows() * 4 + 3;
+        let height = self.cells.rows() * 2 + 2;
         for y in 0..height {
-            let half_row = y as i16 / 2;
-            if y % 2 == 0 {
-                let indent = 2 - y % 4;
-                term.goto(indent, y);
+            let half_row = y as i16 - 1;
+            term.goto(0, y);
 
-                for col in 0..self.cells.cols() as i16 {
-                    let coords = Vector { col, half_row };
-                    if self.vertex_wall_at(coords) {
-                        term.write("*");
-                    } else {
-                        term.write(" ");
-                    }
-                    if coords.on_grid() {
-                        if self.horizontal_wall_at(coords) {
-                            term.write(" --- ");
-                        } else {
-                            term.write("     ");
-                        }
-                    } else {
-                        if let Some(cell) = self.cells.get(coords.nearest_north()) {
-                            term.write(" ");
-                            term.sgr().bg(cell.background);
-                            term.write("       ");
-                            term.sgr().reset();
-                            term.write(" ");
-                        } else {
-                            term.write("         ");
-                        }
-                    }
-                }
-
-                let col = self.cells.cols() as i16;
-                let coords = Vector { col, half_row };
-                term.sgr().reset();
-                if self.vertex_wall_at(coords) {
-                    term.write("*");
-                } else {
-                    term.write(" ");
-                }
-            } else {
-                term.goto(1, y);
-
-                for col in 0..self.cells.cols() as i16 {
-                    let coords = Vector { col, half_row };
-                    term.sgr().reset();
-                    if self.vertical_wall_at(coords) {
-                        if coords.on_grid() {
-                            term.write("/");
-                        } else {
-                            term.write("\\");
-                        }
-                    } else {
-                        term.write(" ");
-                    }
-
-                    if let Some(cell) = self.cells.get(coords.nearest_north()) {
-                        term.write(" ");
-                        term.sgr().bg(cell.background);
-                        term.write("     ");
-                        term.sgr().reset();
-                        term.write(" ");
-                    } else {
-                        term.write("       ");
-                    }
-                }
-
-                let col = self.cells.cols() as i16;
+            for col in 0..self.cells.cols() as i16 {
                 let coords = Vector { col, half_row };
                 term.sgr().reset();
                 if self.vertical_wall_at(coords) {
@@ -207,6 +127,29 @@ impl Maze {
                 } else {
                     term.write(" ");
                 }
+
+                if let Some(cell) = self.cells.get(coords.nearest_north()) {
+                    term.sgr().bg(cell.background);
+                }
+                if !coords.on_grid() && self.horizontal_wall_at(coords) {
+                    term.write("___");
+                } else {
+                    term.write("   ");
+                }
+                term.sgr().reset();
+            }
+
+            let col = self.cells.cols() as i16;
+            let coords = Vector { col, half_row };
+            term.sgr().reset();
+            if self.vertical_wall_at(coords) {
+                if coords.on_grid() {
+                    term.write("/");
+                } else {
+                    term.write("\\");
+                }
+            } else {
+                term.write(" ");
             }
         }
     }
