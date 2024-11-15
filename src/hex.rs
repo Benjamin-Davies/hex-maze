@@ -60,6 +60,15 @@ impl Vector {
         half_row: -1,
     };
 
+    pub const DIRECTIONS: [Self; 6] = [
+        Self::NORTH,
+        Self::NORTH_EAST,
+        Self::SOUTH_EAST,
+        Self::SOUTH,
+        Self::SOUTH_WEST,
+        Self::NORTH_WEST,
+    ];
+
     pub const fn on_grid(&self) -> bool {
         (self.col + self.half_row) % 2 == 0
     }

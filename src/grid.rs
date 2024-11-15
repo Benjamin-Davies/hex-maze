@@ -54,7 +54,7 @@ impl<T> HexGrid<T> {
     }
 
     pub fn contains(&self, coords: impl Into<Position>) -> bool {
-        let coords = coords.into();
+        let coords: Position = coords.into();
         coords.col >= 0
             && coords.col < self.cols as i16
             && coords.row >= 0
@@ -76,6 +76,12 @@ impl<T> HexGrid<T> {
 
     pub fn get_mut(&mut self, coords: impl Into<Position>) -> Option<&mut T> {
         self.index(coords).map(move |index| &mut self.cells[index])
+    }
+
+    pub fn indices(&self) -> impl Iterator<Item = Position> {
+        let cols = self.cols as i16;
+        let rows = self.rows as i16;
+        (0..cols).flat_map(move |col| (0..rows).map(move |row| Position { col, row }))
     }
 }
 

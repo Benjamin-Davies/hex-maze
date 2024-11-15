@@ -1,3 +1,4 @@
+pub mod generator;
 pub mod grid;
 pub mod hex;
 pub mod maze;

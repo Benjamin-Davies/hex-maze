@@ -1,32 +1,31 @@
-use rand::{
-    distributions::{Distribution, Standard},
-    Rng,
+use crate::{
+    grid::HexGrid,
+    hex::Vector,
+    terminal::{Terminal, CLEAR_COLOR},
 };
-
-use crate::{grid::HexGrid, hex::Vector, terminal::Terminal};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Maze {
-    cells: HexGrid<Cell>,
+    pub cells: HexGrid<Cell>,
 }
 
 /// Each cell keeps track of its north-east, south, and north-west walls.
 /// The other three walls belong to neighboring cells.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
-    north_east: bool,
-    south: bool,
-    north_west: bool,
-    background: u8,
+    pub north_east: bool,
+    pub south: bool,
+    pub north_west: bool,
+    pub background: u8,
 }
 
-impl Distribution<Cell> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Cell {
+impl Default for Cell {
+    fn default() -> Self {
         Cell {
-            north_east: rng.gen(),
-            south: rng.gen(),
-            north_west: rng.gen(),
-            background: rng.gen::<u8>() % 32,
+            north_east: true,
+            south: true,
+            north_west: true,
+            background: CLEAR_COLOR,
         }
     }
 }
@@ -41,7 +40,7 @@ impl Maze {
         let cols = (term_width - 3) / 8;
         let rows = (term_height - 3) / 4;
         Self {
-            cells: HexGrid::new_with(cols, rows, |_| rand::random()),
+            cells: HexGrid::new_with(cols, rows, |_| Cell::default()),
         }
     }
 
@@ -55,13 +54,9 @@ impl Maze {
         self.cells.copy_from(&other.cells);
     }
 
-    pub fn contains(&self, coords: Vector) -> bool {
-        self.cells.contains(coords)
-    }
-
     pub fn wall_between(&self, a: Vector, b: Vector) -> bool {
-        let a_inside = self.contains(a);
-        let b_inside = self.contains(b);
+        let a_inside = self.cells.contains(a);
+        let b_inside = self.cells.contains(b);
         if !(a_inside || b_inside) {
             return false;
         }
@@ -77,6 +72,18 @@ impl Maze {
             Vector::SOUTH_WEST => self.cells[b].north_east,
             Vector::NORTH_WEST => self.cells[a].north_west,
             _ => false,
+        }
+    }
+
+    pub fn set_wall_between(&mut self, a: Vector, b: Vector, wall: bool) {
+        match b - a {
+            Vector::NORTH => self.cells[b].south = wall,
+            Vector::NORTH_EAST => self.cells[a].north_east = wall,
+            Vector::SOUTH_EAST => self.cells[b].north_west = wall,
+            Vector::SOUTH => self.cells[a].south = wall,
+            Vector::SOUTH_WEST => self.cells[b].north_east = wall,
+            Vector::NORTH_WEST => self.cells[a].north_west = wall,
+            _ => {}
         }
     }
 

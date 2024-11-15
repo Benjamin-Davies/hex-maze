@@ -20,7 +20,25 @@ pub const fn ctrl(c: u8) -> u8 {
 pub const CTRL_C: u8 = ctrl(b'c');
 pub const ESC: u8 = ctrl(b'[');
 
-pub static EXIT: AtomicBool = AtomicBool::new(false);
+static EXIT: AtomicBool = AtomicBool::new(false);
+
+pub const BLACK: u8 = 0;
+pub const RED: u8 = 1;
+pub const GREEN: u8 = 2;
+pub const YELLOW: u8 = 3;
+pub const BLUE: u8 = 4;
+pub const MAGENTA: u8 = 5;
+pub const CYAN: u8 = 6;
+pub const LIGHT_GREY: u8 = 7;
+pub const GRAY: u8 = 8;
+pub const LIGHT_RED: u8 = 9;
+pub const LIGHT_GREEN: u8 = 10;
+pub const LIGHT_YELLOW: u8 = 11;
+pub const LIGHT_BLUE: u8 = 12;
+pub const LIGHT_MAGENTA: u8 = 13;
+pub const LIGHT_CYAN: u8 = 14;
+pub const WHITE: u8 = 15;
+pub const CLEAR_COLOR: u8 = 16;
 
 pub struct Terminal {
     stdin: io::StdinLock<'static>,
@@ -135,6 +153,7 @@ impl Terminal {
         }
     }
 
+    /// https://en.wikipedia.org/wiki/ANSI_escape_code#Select_Graphic_Rendition_parameters
     pub fn sgr(&mut self) -> SGR {
         SGR { term: self }
     }
