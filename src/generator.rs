@@ -7,8 +7,10 @@ use crate::{
     terminal::{Terminal, BLUE, CLEAR_COLOR, LIGHT_GREY},
 };
 
+/// Uses randomized DFS to generate a maze.
 pub struct Generator {
     pub maze: Maze,
+    pub is_done: bool,
     head: Vector,
     tail: Vec<Vector>,
     visited: HexGrid<bool>,
@@ -25,6 +27,7 @@ impl Generator {
         let visited = HexGrid::new_with(maze.cells.cols(), maze.cells.rows(), |_| false);
         Self {
             maze,
+            is_done: false,
             head,
             tail,
             visited,
@@ -39,6 +42,8 @@ impl Generator {
             self.head = next;
         } else if let Some(prev) = self.tail.pop() {
             self.head = prev;
+        } else {
+            self.is_done = true;
         }
 
         for pos in self.maze.cells.indices() {

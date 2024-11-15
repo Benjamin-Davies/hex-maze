@@ -2,6 +2,7 @@ pub mod generator;
 pub mod grid;
 pub mod hex;
 pub mod maze;
+pub mod solver;
 pub mod terminal;
 
 mod sys;
