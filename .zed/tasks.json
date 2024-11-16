@@ -1,0 +1,7 @@
+[
+  {
+    "label": "Compile and run assembly",
+    "command": "make && ./hex-maze",
+    "cwd": "${ZED_WORKTREE_ROOT}/asm"
+  }
+]

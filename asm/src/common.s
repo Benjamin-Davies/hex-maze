@@ -1,0 +1,2 @@
+%define CTRL_C 0x03
+%define ESC 0x1B
