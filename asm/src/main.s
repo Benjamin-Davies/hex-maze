@@ -30,7 +30,6 @@ main:
 
 _main_loop:
     call maze_draw
-
     call term_flush
 
     mov dword [timeout], 16

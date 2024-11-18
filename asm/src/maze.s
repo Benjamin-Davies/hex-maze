@@ -1,6 +1,9 @@
 %include "src/common.s"
 
 extern printf
+extern putchar
+
+extern hex_on_grid
 
 extern term_flush
 extern term_goto
@@ -15,6 +18,10 @@ hello db "hello", 0
 section .bss
 cols resw 1
 rows resw 1
+
+section .data
+hwall_none db "   ", 0
+hwall_some db "___", 0
 
 section .text
 ; void init()
@@ -84,13 +91,62 @@ _y_loop:
     cmp ax, word [height]
     jge _y_loop_end
 
+    mov ax, word [y]
+    dec ax
+    mov word [half_row], ax
+
     mov di, 0
     mov si, word [y]
     call term_goto
 
-    lea rdi, [hello]
+    mov word [col], 0
+_col_loop:
+    mov ax, word [col]
+    cmp ax, word [cols_]
+    jge _col_loop_end
+
+    mov di, word [col]
+    mov si, word [half_row]
+    call hex_on_grid
+    cmp eax, 0
+    je _vwall_backward
+_vwall_forward:
+    mov edi, '/'
+    jmp _vwall_type_end
+_vwall_backward:
+    mov edi, '\'
+_vwall_type_end:
+    call putchar
+
+    mov di, word [col]
+    mov si, word [half_row]
+    call hex_on_grid
+    cmp eax, 0
+    jne _hwall_none
+_hwall_some:
+    mov rdi, hwall_some
+    jmp _hwall_end
+_hwall_none:
+    mov rdi, hwall_none
+_hwall_end:
     call printf
-    call term_flush
+
+    inc word [col]
+    jmp _col_loop
+_col_loop_end:
+
+    mov di, word [cols]
+    mov si, word [half_row]
+    call hex_on_grid
+    cmp eax, 0
+    je _last_vwall_backward
+_last_vwall_forward:
+    mov edi, '/'
+    jmp _last_vwall_type_end
+_last_vwall_backward:
+    mov edi, '\'
+_last_vwall_type_end:
+    call putchar
 
     inc word [y]
     jmp _y_loop
