@@ -1,5 +1,6 @@
 %include "src/common.s"
 
+extern ioctl
 extern memcpy
 extern memset
 extern poll
@@ -22,6 +23,7 @@ global term_read
 global term_flush
 global term_clear
 global term_goto
+global term_get_size
 
 %define POLLIN 1
 
@@ -55,6 +57,8 @@ struc termios_t
     .c_ospeed resd 1
 endstruc
 
+%define TIOCGWINSZ 0x5413
+
 section .data
 %define CSI ESC, "["
 
@@ -64,7 +68,7 @@ show_cursor db CSI, "?25h", 0
 hide_cursor db CSI, "?25l", 0
 
 clear_screen db CSI, "2J", 0
-goto db CSI, "%d;%dH", 0
+goto db CSI, "%hd;%hdH", 0
 
 section .bss
 old_termios:
@@ -82,6 +86,7 @@ old_termios:
 term_should_exit resd 1
 
 section .text
+; void term_init()
 term_init:
 %define FRAME_SIZE (sigaction_t_size+termios_t_size+12)
 %define action (rbp-FRAME_SIZE)
@@ -133,11 +138,12 @@ term_init:
     pop rbp
     ret
 
+; void sig_handler(int signum)
 sig_handler:
-    mov eax, 1
-    mov dword [term_should_exit], eax
+    mov dword [term_should_exit], 1
     ret
 
+; void term_exit()
 term_exit:
     push rbp
 
@@ -157,6 +163,7 @@ term_exit:
     pop rbp
     ret
 
+; int term_poll(int timeout)
 term_poll:
 %define FRAME_SIZE (pollfd_t_size+4)
 %define fds (rbp-FRAME_SIZE)
@@ -179,6 +186,7 @@ term_poll:
     pop rbp
     ret
 
+; char term_read()
 term_read:
 %define FRAME_SIZE (16)
 %define buffer (rbp-FRAME_SIZE)
@@ -197,6 +205,7 @@ term_read:
     pop rbp
     ret
 
+; void term_flush()
 term_flush:
     push rbp
 
@@ -206,6 +215,7 @@ term_flush:
     pop rbp
     ret
 
+; void term_clear()
 term_clear:
     push rbp
 
@@ -215,16 +225,36 @@ term_clear:
     pop rbp
     ret
 
+; void term_goto(short x, short y)
 term_goto:
     push rbp
 
-    mov rdx, rsi
-    mov rsi, rdi
-    inc rsi
-    inc rdx
+    mov dx, di
+    ; mov si, si ; redundant
+    inc si
+    inc dx
 
     lea rdi, [goto]
     call printf
 
+    pop rbp
+    ret
+
+; Returns a winsize_t, packed into a single qword
+; long term_get_size()
+term_get_size:
+%define FRAME_SIZE 16
+%define ws (rbp-FRAME_SIZE)
+    push rbp
+    mov rbp, rsp
+    sub rsp, FRAME_SIZE
+
+    mov edi, STDOUT
+    mov rsi, TIOCGWINSZ
+    lea rdx, [ws]
+    call ioctl
+
+    mov rax, qword [ws]
+    add rsp, FRAME_SIZE
     pop rbp
     ret

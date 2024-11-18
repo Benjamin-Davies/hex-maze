@@ -10,6 +10,7 @@ use hex_maze::{
 
 fn main() {
     let mut term = Terminal::new();
+    term.clear();
 
     let mut state = State::new(&term);
     'main_loop: while !term.should_exit() {

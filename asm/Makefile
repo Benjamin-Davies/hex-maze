@@ -3,7 +3,7 @@ SFLAGS=-f elf64 -g
 
 all: hex-maze
 
-hex-maze: src/main.o src/term.o
+hex-maze: src/main.o src/maze.o src/terminal.o
 	$(CC) $(LDFLAGS) -o $@ $^
 
 %.o: %.s

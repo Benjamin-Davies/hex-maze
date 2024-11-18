@@ -1,6 +1,7 @@
 %include "src/common.s"
 
-extern printf
+extern maze_init
+extern maze_draw
 
 extern term_init
 extern term_exit
@@ -13,10 +14,8 @@ extern term_goto
 
 global main
 
-section .data
-hello db `Hello, World!`, 0
-
 section .text
+; int main()
 main:
 %define FRAME_SIZE 16
 %define timeout (rbp-FRAME_SIZE)
@@ -25,43 +24,47 @@ main:
     sub rsp, FRAME_SIZE
 
     call term_init
-
-main_loop:
     call term_clear
-    mov rdi, 0
-    mov rsi, 0
-    call term_goto
 
-    mov rdi, hello
-    call printf
+    call maze_init
+
+_main_loop:
+    call maze_draw
 
     call term_flush
 
     mov dword [timeout], 16
-input_loop:
+_input_loop:
     mov edi, dword [timeout]
     call term_poll
     cmp eax, 0
-    jle input_loop_end
+    jle _input_loop_end
 
     call term_read
-    cmp rax, CTRL_C
-    je main_loop_end
-    cmp rax, ESC
-    je main_loop_end
-    cmp rax, "q"
-    je main_loop_end
+    cmp al, CTRL_C
+    je _main_loop_end
+    cmp al, ESC
+    je _main_loop_end
+    cmp al, 'q'
+    je _main_loop_end
+    cmp al, 'r'
+    je _input_switch_reset
+    jmp _input_switch_end
+_input_switch_reset:
+    call maze_init
+    jmp _input_switch_end
+_input_switch_end:
 
     mov dword [timeout], 0
-    jmp input_loop
-input_loop_end:
+    jmp _input_loop
+_input_loop_end:
 
     mov eax, dword [term_should_exit]
     cmp eax, 0
-    jne main_loop_end
+    jne _main_loop_end
 
-    jmp main_loop
-main_loop_end:
+    jmp _main_loop
+_main_loop_end:
 
     call term_exit
 
