@@ -4,6 +4,7 @@ extern printf
 
 extern term_init
 extern term_exit
+extern term_should_exit
 extern term_poll
 extern term_read
 extern term_flush
@@ -14,12 +15,11 @@ global main
 
 section .data
 hello db `Hello, World!`, 0
-decimal db `%d`, 0
 
 section .text
 main:
 %define FRAME_SIZE 16
-%define timeout (rbp-16)
+%define timeout (rbp-FRAME_SIZE)
     push rbp
     mov rbp, rsp
     sub rsp, FRAME_SIZE
@@ -41,7 +41,7 @@ main_loop:
 input_loop:
     mov edi, dword [timeout]
     call term_poll
-    cmp rax, 0
+    cmp eax, 0
     jle input_loop_end
 
     call term_read
@@ -53,7 +53,12 @@ input_loop:
     je main_loop_end
 
     mov dword [timeout], 0
+    jmp input_loop
 input_loop_end:
+
+    mov eax, dword [term_should_exit]
+    cmp eax, 0
+    jne main_loop_end
 
     jmp main_loop
 main_loop_end:

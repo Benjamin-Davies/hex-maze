@@ -1,8 +1,10 @@
 %include "src/common.s"
 
 extern memcpy
+extern memset
 extern poll
 extern read
+extern sigaction
 
 extern fflush
 extern printf
@@ -14,6 +16,7 @@ extern tcsetattr
 
 global term_init
 global term_exit
+global term_should_exit
 global term_poll
 global term_read
 global term_flush
@@ -22,22 +25,32 @@ global term_goto
 
 %define POLLIN 1
 
-struc pollfd
+struc pollfd_t
     .fd resd 1
     .events resd 1
     .revents resd 1
 endstruc
 
+%define SIGTERM 15
+
+struc sigaction_t
+    .sa_handler resq 1
+    .sa_mask resq 16
+    .sa_flags resd 1
+    ._padding resd 1
+    .sa_restorer resq 1
+endstruc
+
 %define TCSADRAIN 1
 
-struc termios
+struc termios_t
     .c_iflag resd 1
     .c_oflag resd 1
     .c_cflag resd 1
     .c_lflag resd 1
     .c_line resb 1
     .c_cc resb 32
-    _padding resb 3
+    ._padding resb 3
     .c_ispeed resd 1
     .c_ospeed resd 1
 endstruc
@@ -55,32 +68,58 @@ goto db CSI, "%d;%dH", 0
 
 section .bss
 old_termios:
-    istruc termios iend
+    istruc termios_t
+        at .c_iflag, resd 1
+        at .c_oflag, resd 1
+        at .c_cflag, resd 1
+        at .c_lflag, resd 1
+        at .c_line, resb 1
+        at .c_cc, resb 32
+        at ._padding, resb 3
+        at .c_ispeed, resd 1
+        at .c_ospeed, resd 1
+    iend
+term_should_exit resd 1
 
 section .text
 term_init:
-%define FRAME_SIZE (termios_size+4)
-%define current_termios (rbp-FRAME_SIZE)
+%define FRAME_SIZE (sigaction_t_size+termios_t_size+12)
+%define action (rbp-FRAME_SIZE)
+%define termios (rbp-FRAME_SIZE+sigaction_t_size)
     push rbp
     mov rbp, rsp
     sub rsp, FRAME_SIZE
 
+    ; init signals
+    mov dword [term_should_exit], 0
+
+    lea rdi, dword [action]
+    mov rsi, 0
+    mov rdx, sigaction_t_size
+    call memset
+    mov qword [action+sigaction_t.sa_handler], sig_handler
+
+    mov edi, SIGTERM
+    lea rsi, [action]
+    mov rdx, 0
+    call sigaction
+
     ; init termios
-    mov rdi, 0
-    lea rsi, [current_termios]
+    mov edi, STDIN
+    lea rsi, [termios]
     call tcgetattr
 
     lea rdi, [old_termios]
-    lea rsi, [current_termios]
-    mov rdx, termios_size
+    lea rsi, [termios]
+    mov rdx, termios_t_size
     call memcpy
 
-    lea rdi, [current_termios]
+    lea rdi, [termios]
     call cfmakeraw
 
-    mov rdi, 0
-    mov rsi, TCSADRAIN
-    lea rdx, [current_termios]
+    mov edi, STDIN
+    mov esi, TCSADRAIN
+    lea rdx, [termios]
     call tcsetattr
 
     ; init CSI
@@ -94,6 +133,11 @@ term_init:
     pop rbp
     ret
 
+sig_handler:
+    mov eax, 1
+    mov dword [term_should_exit], eax
+    ret
+
 term_exit:
     push rbp
 
@@ -105,7 +149,7 @@ term_exit:
     call term_flush
 
     ; restore termios
-    mov rdi, 0
+    mov rdi, STDIN
     mov rsi, TCSADRAIN
     lea rdx, [old_termios]
     call tcsetattr
@@ -114,20 +158,20 @@ term_exit:
     ret
 
 term_poll:
-%define FRAME_SIZE (pollfd_size+4)
+%define FRAME_SIZE (pollfd_t_size+4)
 %define fds (rbp-FRAME_SIZE)
-%define timeout (rbp-FRAME_SIZE+pollfd_size)
+%define timeout (rbp-FRAME_SIZE+pollfd_t_size)
     push rbp
     mov rbp, rsp
     sub rsp, FRAME_SIZE
     mov dword [timeout], edi
 
-    mov dword [fds+pollfd.fd], 0
-    mov dword [fds+pollfd.events], POLLIN
-    mov dword [fds+pollfd.revents], 0
+    mov dword [fds+pollfd_t.fd], STDIN
+    mov dword [fds+pollfd_t.events], POLLIN
+    mov dword [fds+pollfd_t.revents], 0
 
     lea rdi, [fds]
-    mov rsi, 1
+    mov esi, 1
     mov edx, dword [timeout]
     call poll
 
@@ -141,8 +185,7 @@ term_read:
     push rbp
     mov rbp, rsp
     sub rsp, FRAME_SIZE
-    xor eax, eax
-    mov dword [buffer], eax
+    mov dword [buffer], 0
 
     mov rdi, 0
     lea rsi, dword [buffer]
