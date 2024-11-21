@@ -3,7 +3,9 @@
 extern printf
 extern putchar
 
+extern hex_nearest_north
 extern hex_on_grid
+extern hex_ortho_to_stagg
 
 extern term_flush
 extern term_goto
@@ -67,6 +69,135 @@ _maze_init_end:
     pop rbp
     ret
 
+; Doesn't require 16-byte stack alignment
+; char contains(short col, short half_row)
+maze_contains:
+    call hex_ortho_to_stagg
+
+    cmp di, 0
+    jnge _maze_doesnt_contain
+    cmp di, [cols]
+    jnl _maze_doesnt_contain
+    cmp si, 0
+    jnge _maze_doesnt_contain
+    cmp si, [rows]
+    jnl _maze_doesnt_contain
+
+_maze_does_contain:
+    mov eax, 1
+    ret
+
+_maze_doesnt_contain:
+    mov eax, 0
+    ret
+
+; char maze_wall_between(short a_col, short a_half_row, short b_col, short b_half_row)
+maze_wall_between:
+%define FRAME_SIZE 16
+%define a_col (rbp-FRAME_SIZE) ; short
+%define a_half_row (rbp-FRAME_SIZE+2) ; short
+%define b_col (rbp-FRAME_SIZE+4) ; short
+%define b_half_row (rbp-FRAME_SIZE+6) ; short
+%define a_inside (rbp-FRAME_SIZE+8) ; char
+%define b_inside (rbp-FRAME_SIZE+9) ; char
+    push rbp
+    mov rbp, rsp
+    sub rsp, FRAME_SIZE
+    mov word [a_col], di
+    mov word [a_half_row], si
+    mov word [b_col], dx
+    mov word [b_half_row], cx
+
+    call maze_contains
+    mov byte [a_inside], al
+    mov di, word [b_col]
+    mov si, word [b_half_row]
+    call maze_contains
+    mov byte [b_inside], al
+
+    ; !(a_inside || b_inside)
+    mov al, [a_inside]
+    or al, [b_inside]
+    cmp al, 0
+    je _maze_has_no_wall_between
+
+    ; !a_inside && b_inside
+    mov al, [a_inside]
+    xor al, 1
+    and al, [b_inside]
+    cmp al, 0
+    jne _maze_has_wall_between
+
+    ; a_inside && !b_inside
+    mov al, [b_inside]
+    xor al, 1
+    and al, [a_inside]
+    cmp al, 0
+    jne _maze_has_wall_between
+
+_maze_has_no_wall_between:
+    mov al, 0
+    jmp _maze_wall_between_end
+
+_maze_has_wall_between:
+    mov al, 1
+
+_maze_wall_between_end:
+    add rsp, FRAME_SIZE
+    pop rbp
+    ret
+
+; char maze_vertical_wall_at(short col, short half_row)
+maze_horizontal_wall_at:
+    push rbp
+    mov rbp, rsp
+
+    call hex_nearest_north
+
+    mov dx, di
+    mov cx, si
+    add cx, 2
+    call maze_wall_between
+
+    pop rbp
+    ret
+
+; char maze_vertical_wall_at(short col, short half_row)
+maze_vertical_wall_at:
+%define FRAME_SIZE 16
+%define col (rbp-FRAME_SIZE) ; short
+%define half_row (rbp-FRAME_SIZE+2) ; short
+    push rbp
+    mov rbp, rsp
+    mov word [col], di
+    mov word [half_row], si
+
+    call hex_on_grid
+    cmp al, 0
+    je _maze_vwall_even
+_maze_vwall_odd:
+    mov di, word [col]
+    dec di
+    mov si, word [half_row]
+    dec si
+    mov dx, word [col]
+    mov cx, word [half_row]
+    jmp _maze_vwall_end
+
+_maze_vwall_even:
+    mov di, word [col]
+    dec di
+    mov si, word [half_row]
+    inc si
+    mov dx, word [col]
+    mov cx, word [half_row]
+
+_maze_vwall_end:
+    call maze_wall_between
+
+    pop rbp
+    ret
+
 ; void draw()
 maze_draw:
 %define FRAME_SIZE 16
@@ -107,17 +238,30 @@ _col_loop:
 
     mov di, word [col]
     mov si, word [half_row]
+    call maze_vertical_wall_at
+    cmp al, 0
+    je _vwall_missing
+    mov di, word [col]
+    mov si, word [half_row]
     call hex_on_grid
-    cmp eax, 0
+    cmp al, 0
     je _vwall_backward
 _vwall_forward:
     mov edi, '/'
     jmp _vwall_type_end
 _vwall_backward:
     mov edi, '\'
+    jmp _vwall_type_end
+_vwall_missing:
+    mov edi, ' '
 _vwall_type_end:
     call putchar
 
+    mov di, word [col]
+    mov si, word [half_row]
+    call maze_horizontal_wall_at
+    cmp eax, 0
+    je _hwall_none
     mov di, word [col]
     mov si, word [half_row]
     call hex_on_grid
@@ -137,14 +281,22 @@ _col_loop_end:
 
     mov di, word [cols]
     mov si, word [half_row]
+    call maze_vertical_wall_at
+    cmp al, 0
+    je _last_vwall_missing
+    mov di, word [cols]
+    mov si, word [half_row]
     call hex_on_grid
-    cmp eax, 0
+    cmp al, 0
     je _last_vwall_backward
 _last_vwall_forward:
     mov edi, '/'
     jmp _last_vwall_type_end
 _last_vwall_backward:
     mov edi, '\'
+    jmp _last_vwall_type_end
+_last_vwall_missing:
+    mov edi, ' '
 _last_vwall_type_end:
     call putchar
 
