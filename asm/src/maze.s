@@ -50,12 +50,10 @@ maze_init:
     mov rbp, rsp
     sub rsp, FRAME_SIZE
 
-    ;call term_get_size
-    ;mov qword [ws], rax
-    ;mov di, word [ws+winsize_t.ws_col]
-    ;mov si, word [ws+winsize_t.ws_row]
-    mov di, 80
-    mov si, 10
+    call term_get_size
+    mov qword [ws], rax
+    mov di, word [ws+winsize_t.ws_col]
+    mov si, word [ws+winsize_t.ws_row]
 
     cmp di, 11
     jl _maze_init_empty
@@ -176,7 +174,41 @@ maze_wall_between:
     cmp al, 0
     jne _maze_has_wall_between
 
-_maze_wall_inside_maze:
+    mov di, word [a_col]
+    mov si, word [a_half_row]
+    mov dx, word [b_col]
+    mov cx, word [b_half_row]
+    call maze_wall_between_ptr
+    mov al, byte [rax]
+    jmp _maze_wall_between_end
+
+_maze_has_no_wall_between:
+    mov al, 0
+    jmp _maze_wall_between_end
+
+_maze_has_wall_between:
+    mov al, 1
+
+_maze_wall_between_end:
+    add rsp, FRAME_SIZE
+    pop rbp
+    ret
+
+; char *maze_wall_between_ptr(short a_col, short a_half_row, short b_col, short b_half_row)
+maze_wall_between_ptr:
+%define FRAME_SIZE 16
+%define a_col (rbp-FRAME_SIZE) ; short
+%define a_half_row (rbp-FRAME_SIZE+2) ; short
+%define b_col (rbp-FRAME_SIZE+4) ; short
+%define b_half_row (rbp-FRAME_SIZE+6) ; short
+    push rbp
+    mov rbp, rsp
+    sub rsp, FRAME_SIZE
+    mov word [a_col], di
+    mov word [a_half_row], si
+    mov word [b_col], dx
+    mov word [b_half_row], cx
+
     ; let delta_col = b_col - a_col
     movzx rdx, word [b_col]
     movzx rdi, word [a_col]
@@ -196,9 +228,9 @@ _maze_wall_inside_maze:
     align 8
 _maze_wall_jump_table dq \
     _maze_wall_south, _maze_wall_south_east, \
-    _maze_has_no_wall_between, _maze_wall_south_west, \
+    _maze_wall_south, _maze_wall_south_west, \
     _maze_wall_north, _maze_wall_north_east, \
-    _maze_has_no_wall_between, _maze_wall_north_west
+    _maze_wall_north, _maze_wall_north_west
 
 _maze_wall_north:
     mov si, word [b_col]
@@ -228,27 +260,19 @@ _maze_wall_north_west:
 _maze_wall_n_or_s:
     lea rdi, [cells]
     call grid_get
-    mov al, byte [rax+cell_t.south]
-    jmp _maze_wall_between_end
+    lea rax, byte [rax+cell_t.south]
+    jmp _maze_wall_ptr_end
 _maze_wall_ne_or_sw:
     lea rdi, [cells]
     call grid_get
-    mov al, byte [rax+cell_t.north_east]
-    jmp _maze_wall_between_end
+    lea rax, byte [rax+cell_t.north_east]
+    jmp _maze_wall_ptr_end
 _maze_wall_nw_or_se:
     lea rdi, [cells]
     call grid_get
-    mov al, byte [rax+cell_t.north_west]
-    jmp _maze_wall_between_end
+    lea rax, byte [rax+cell_t.north_west]
 
-_maze_has_no_wall_between:
-    mov al, 0
-    jmp _maze_wall_between_end
-
-_maze_has_wall_between:
-    mov al, 1
-
-_maze_wall_between_end:
+_maze_wall_ptr_end:
     add rsp, FRAME_SIZE
     pop rbp
     ret
