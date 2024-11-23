@@ -11,3 +11,10 @@ struc winsize_t
     .ws_xpixel resw 1
     .ws_ypixel resw 1
 endstruc
+
+struc grid_t
+    .ptr resq 1
+    .cols resw 1
+    .rows resw 1
+endstruc
+%define grid_item_size 8
