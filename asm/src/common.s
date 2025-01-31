@@ -18,3 +18,10 @@ struc grid_t
     .rows resw 1
 endstruc
 %define grid_item_size 8
+
+struc vec_t
+    .ptr resq 1
+    .len resq 1
+    .capacity resq 1
+endstruc
+%define vec_item_size 8

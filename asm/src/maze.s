@@ -15,7 +15,10 @@ extern term_goto
 extern term_get_size
 
 global maze_init
+global maze_wall_between
+global maze_wall_between_ptr
 global maze_draw
+global maze_cells
 
 struc cell_t
     .north_east resb 1
@@ -31,14 +34,14 @@ hwall_some db "___", 0
 
 section .bss
 
-cells:
+maze_cells:
     istruc grid_t
         at .ptr, resq 1
         at .cols, resw 1
         at .rows, resw 1
     iend
-%define cols (cells+grid_t.cols)
-%define rows (cells+grid_t.rows)
+%define cols (maze_cells+grid_t.cols)
+%define rows (maze_cells+grid_t.rows)
 
 section .text
 
@@ -74,7 +77,7 @@ maze_init:
     div di
     mov word [rows], ax
 
-    lea rdi, [cells]
+    lea rdi, [maze_cells]
     mov si, word [cols]
     mov dx, word [rows]
     call grid_new
@@ -82,16 +85,16 @@ maze_init:
     movzx rax, word [cols]
     movzx rdi, word [rows]
     mul rdi ; rax = cols * rows
-    mov rdi, qword [cells+grid_t.ptr] ; start_ptr
+    mov rdi, qword [maze_cells+grid_t.ptr] ; start_ptr
     mov rsi, 0 ; index
 _maze_init_loop:
     cmp rsi, rax
     jge _maze_init_loop_end
 
     lea rdx, qword [rdi+rsi*grid_item_size] ; current_ptr
-    mov byte [rdx+cell_t.north_east], 0
-    mov byte [rdx+cell_t.south], 0
-    mov byte [rdx+cell_t.north_west], 0
+    mov byte [rdx+cell_t.north_east], 1
+    mov byte [rdx+cell_t.south], 1
+    mov byte [rdx+cell_t.north_west], 1
 
     inc rsi
     jmp _maze_init_loop
@@ -258,17 +261,17 @@ _maze_wall_north_west:
     jmp _maze_wall_nw_or_se
 
 _maze_wall_n_or_s:
-    lea rdi, [cells]
+    lea rdi, [maze_cells]
     call grid_get
     lea rax, byte [rax+cell_t.south]
     jmp _maze_wall_ptr_end
 _maze_wall_ne_or_sw:
-    lea rdi, [cells]
+    lea rdi, [maze_cells]
     call grid_get
     lea rax, byte [rax+cell_t.north_east]
     jmp _maze_wall_ptr_end
 _maze_wall_nw_or_se:
-    lea rdi, [cells]
+    lea rdi, [maze_cells]
     call grid_get
     lea rax, byte [rax+cell_t.north_west]
 

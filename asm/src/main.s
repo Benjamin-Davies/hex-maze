@@ -1,5 +1,8 @@
 %include "src/common.s"
 
+extern generator_init
+extern generator_step
+
 extern maze_init
 extern maze_draw
 
@@ -15,6 +18,7 @@ extern term_goto
 global main
 
 section .text
+
 ; int main()
 main:
 %define FRAME_SIZE 16
@@ -27,8 +31,11 @@ main:
     call term_clear
 
     call maze_init
+    call generator_init
 
 _main_loop:
+    call generator_step
+
     call maze_draw
     call term_flush
 
